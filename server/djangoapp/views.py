@@ -1,65 +1,71 @@
-# Uncomment the required imports before adding the code
-
-# from django.shortcuts import render
-# from django.http import HttpResponseRedirect, HttpResponse
-# from django.contrib.auth.models import User
-# from django.shortcuts import get_object_or_404, render, redirect
-# from django.contrib.auth import logout
-# from django.contrib import messages
-# from datetime import datetime
-
+from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
-from django.contrib.auth import login, authenticate
-import logging
-import json
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
 from django.views.decorators.csrf import csrf_exempt
-# from .populate import initiate
+import json
+import logging
 
-
-# Get an instance of a logger
 logger = logging.getLogger(__name__)
 
-
-# Create your views here.
-
-# Create a `login_request` view to handle sign in request
 @csrf_exempt
-def login_user(request):
-    # Get username and password from request.POST dictionary
-    data = json.loads(request.body)
-    username = data['userName']
-    password = data['password']
-    # Try to check if provide credential can be authenticated
-    user = authenticate(username=username, password=password)
-    data = {"userName": username}
-    if user is not None:
-        # If user is valid, call login method to login current user
-        login(request, user)
-        data = {"userName": username, "status": "Authenticated"}
+def login_request(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            username = data.get('userName')
+            password = data.get('password')
+
+            logger.debug(f"Login attempt for user: {username}")
+
+            user = authenticate(username=username, password=password)
+            if user is not None:
+                login(request, user)
+                logger.info(f"User {username} authenticated successfully")
+                return JsonResponse({"userName": username, "status": "Authenticated"})
+            else:
+                logger.warning(f"Invalid credentials for user: {username}")
+                return JsonResponse({"userName": username, "status": "Invalid credentials"}, status=401)
+
+        except Exception as e:
+            logger.error(f"Error in login view: {e}")
+            return JsonResponse({"status": "Invalid request"}, status=400)
+    else:
+        return JsonResponse({"status": "Only POST allowed"}, status=405)
+
+@csrf_exempt
+def logout_request(request):
+    logout(request)
+    data = {"userName": ""}
     return JsonResponse(data)
 
-# Create a `logout_request` view to handle sign out request
-# def logout_request(request):
-# ...
+@csrf_exempt
+def register_user(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            username = data.get('userName')
+            password = data.get('password')
+            first_name = data.get('firstName', '')
+            last_name = data.get('lastName', '')
+            email = data.get('email', '')
 
-# Create a `registration` view to handle sign up request
-# @csrf_exempt
-# def registration(request):
-# ...
+            if User.objects.filter(username=username).exists():
+                return JsonResponse({"error": "Already Registered"}, status=400)
 
-# # Update the `get_dealerships` view to render the index page with
-# a list of dealerships
-# def get_dealerships(request):
-# ...
+            # Create new user
+            user = User.objects.create_user(username=username, password=password, email=email,
+                                            first_name=first_name, last_name=last_name)
+            user.save()
 
-# Create a `get_dealer_reviews` view to render the reviews of a dealer
-# def get_dealer_reviews(request,dealer_id):
-# ...
+            # Automatically log in the new user
+            login(request, user)
 
-# Create a `get_dealer_details` view to render the dealer details
-# def get_dealer_details(request, dealer_id):
-# ...
+            logger.info(f"User {username} registered and logged in successfully")
+            return JsonResponse({"userName": username, "status": "Registered"})
 
-# Create a `add_review` view to submit a review
-# def add_review(request):
-# ...
+        except Exception as e:
+            logger.error(f"Error in register view: {e}")
+            return JsonResponse({"status": "Invalid request"}, status=400)
+    else:
+        return JsonResponse({"status": "Only POST allowed"}, status=405)
